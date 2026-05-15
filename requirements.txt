@@ -1,0 +1,8 @@
+feedparser
+beautifulsoup4
+pillow
+moviepy
+gTTS
+requests
+numpy
+deep-translator

@@ -766,8 +766,8 @@ def create_video(news, image_path, audio_path, output_path):
 # =========================
 
 def get_facebook_settings():
-    page_id = os.getenv("FB_PAGE_ID")
-    page_token = os.getenv("FB_PAGE_TOKEN")
+    page_id = os.getenv("1020689164470492")
+    page_token = os.getenv("EAIFMs5yoDt0BRdXHixZANpy5ewTQzjKj680Y0B2OFCxarlwZC77PqX4y9HKMxZBaD10mRDkYvtksiPKijh1Fj0ZABvGq6h2mD7LZBBfSDKLZCwoz4moLP3nlcr4lCwk9SHO4kZBMyJDZBObgADOrkzgb29hMZB8daz65xOBL3NMM5CFPATu7HgPG0YuMaAS2L8D4wsIRTFnjbPsIE4fhZCVIB9PrP7axof7GTCT4iyoBXz5WEi9YqZCNcTdy9ZAUBChMGETtDGPK6RhgRyJJj8yf7rFVOueb")
 
     if not page_id or not page_token:
         print("Facebook upload skipped: FB_PAGE_ID or FB_PAGE_TOKEN missing.")

@@ -1,7 +1,6 @@
 import os
 import re
 import json
-import random
 import hashlib
 from io import BytesIO
 from datetime import datetime
@@ -12,7 +11,6 @@ import feedparser
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from gtts import gTTS
-from deep_translator import GoogleTranslator
 
 from moviepy import (
     VideoClip,
@@ -24,7 +22,7 @@ from moviepy import (
 # SETTINGS
 # =========================
 
-PAGE_NAME = "WORLD NEWS IN SINHALA"
+PAGE_NAME = "WORLD PULSE DAILY"
 
 OUTPUT_DIR = "output"
 ASSET_DIR = "assets"
@@ -34,36 +32,21 @@ VIDEO_WIDTH = 1080
 VIDEO_HEIGHT = 1920
 VIDEO_SIZE = (VIDEO_WIDTH, VIDEO_HEIGHT)
 
-# Sinhala
-VOICE_LANGUAGE = "si"
-TRANSLATE_TO = "si"
+# English = "en"
+# Sinhala voice can try = "si"
+LANGUAGE = "en"
 
-MAX_SCRIPT_CHARS = 750
+# Best for reels: 500-700
+# Longer video: 1200-2000
+MAX_SCRIPT_CHARS = 700
 
 SHOW_SOURCE_TEXT = False
-
 
 FEEDS = [
     "https://www.bbc.com/news/world/rss.xml",
     "https://feeds.skynews.com/feeds/rss/world.xml",
     "https://www.aljazeera.com/xml/rss/all.xml",
     "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
-    "https://feeds.npr.org/1004/rss.xml",
-    "https://www.france24.com/en/rss",
-    "https://www.dw.com/en/top-stories/s-9097?maca=en-rss-en-all-1573-rdf",
-    "https://www.theguardian.com/world/rss",
-    "https://www.cbc.ca/cmlink/rss-world",
-    "https://www.thehindu.com/news/international/feeder/default.rss",
-    "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms",
-    "https://www.hindustantimes.com/feeds/rss/world-news/rssfeed.xml",
-    "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml",
-    "https://www.scmp.com/rss/91/feed",
-    "https://www.middleeasteye.net/rss",
-    "https://www.arabnews.com/rss.xml",
-    "https://feeds.bbci.co.uk/news/business/rss.xml",
-    "https://feeds.bbci.co.uk/news/technology/rss.xml",
-    "https://www.theguardian.com/technology/rss",
-    "https://www.theguardian.com/science/rss",
 ]
 
 USER_AGENT = (
@@ -93,57 +76,8 @@ def shorten(text, max_chars):
     return cut + "..."
 
 
-def has_sinhala(text):
-    return bool(re.search(r"[\u0D80-\u0DFF]", text or ""))
-
-
 # =========================
-# TRANSLATION
-# =========================
-
-def translate_to_sinhala(text, max_chars=1200):
-    text = shorten(text, max_chars)
-
-    if not text:
-        return ""
-
-    try:
-        translated = GoogleTranslator(source="auto", target=TRANSLATE_TO).translate(text)
-        translated = clean_text(translated)
-
-        # If translation did not return Sinhala, reject it.
-        if not has_sinhala(translated):
-            print("Translation rejected: no Sinhala characters found.")
-            return ""
-
-        return translated
-
-    except Exception as e:
-        print("Translation failed:", e)
-        return ""
-
-
-def translate_news(news):
-    english_title = clean_text(news.get("title", ""))
-    english_summary = clean_text(news.get("summary", ""))
-
-    sinhala_title = translate_to_sinhala(english_title, 250)
-    sinhala_summary = translate_to_sinhala(english_summary, 900)
-
-    if not sinhala_title:
-        return None
-
-    if not sinhala_summary:
-        sinhala_summary = sinhala_title
-
-    news["title_si"] = sinhala_title
-    news["summary_si"] = sinhala_summary
-
-    return news
-
-
-# =========================
-# USED MEMORY
+# USED NEWS MEMORY
 # =========================
 
 def load_used():
@@ -159,25 +93,25 @@ def load_used():
 
 def save_used(used):
     with open(USED_FILE, "w", encoding="utf-8") as f:
-        json.dump(used[-1000:], f, indent=2)
+        json.dump(used[-500:], f, indent=2)
 
 
 # =========================
-# FONTS
+# FONT SYSTEM
 # =========================
 
 def get_font(size, bold=False):
     if bold:
         font_paths = [
-            "/usr/share/fonts/truetype/noto/NotoSansSinhala-Bold.ttf",
-            "/usr/share/fonts/truetype/noto/NotoSerifSinhala-Bold.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+            "DejaVuSans-Bold.ttf",
         ]
     else:
         font_paths = [
-            "/usr/share/fonts/truetype/noto/NotoSansSinhala-Regular.ttf",
-            "/usr/share/fonts/truetype/noto/NotoSerifSinhala-Regular.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+            "DejaVuSans.ttf",
         ]
 
     for path in font_paths:
@@ -220,7 +154,8 @@ def fit_text_to_box(draw, text, max_width, max_height, start_size, min_size, bol
     for size in range(start_size, min_size - 1, -2):
         font = get_font(size, bold)
         lines = wrap_text(draw, text, font, max_width)
-        line_height = int(size * 1.35)
+
+        line_height = int(size * 1.22)
         total_height = len(lines) * line_height
 
         if total_height <= max_height:
@@ -228,7 +163,8 @@ def fit_text_to_box(draw, text, max_width, max_height, start_size, min_size, bol
 
     font = get_font(min_size, bold)
     lines = wrap_text(draw, text, font, max_width)
-    line_height = int(min_size * 1.35)
+    line_height = int(min_size * 1.22)
+
     return font, lines, line_height
 
 
@@ -241,7 +177,7 @@ def draw_multiline(draw, lines, x, y, font, line_height, fill):
 
 
 # =========================
-# IMAGE SYSTEM
+# REAL NEWS IMAGE SYSTEM
 # =========================
 
 def upgrade_image_url(url):
@@ -250,6 +186,7 @@ def upgrade_image_url(url):
 
     upgraded = url
 
+    # BBC small RSS thumbnail upgrade
     replacements = [
         "/standard/240/",
         "/standard/320/",
@@ -264,8 +201,7 @@ def upgrade_image_url(url):
     ]
 
     for old in replacements:
-        size_part = old.split("/")[-2]
-        upgraded = upgraded.replace(old, old.replace(size_part, "1024"))
+        upgraded = upgraded.replace(old, old.replace(old.split("/")[-2], "1024"))
 
     return upgraded
 
@@ -398,17 +334,19 @@ def create_fallback_news_image(path):
 
     for y in range(VIDEO_HEIGHT):
         ratio = y / VIDEO_HEIGHT
+
         r = int(8 * (1 - ratio) + 12 * ratio)
         g = int(16 * (1 - ratio) + 55 * ratio)
         b = int(35 * (1 - ratio) + 95 * ratio)
+
         draw.line([(0, y), (VIDEO_WIDTH, y)], fill=(r, g, b))
 
-    font_big = get_font(86, True)
-    font_small = get_font(42, False)
+    font_big = get_font(90, True)
+    font_small = get_font(44, False)
 
-    draw.text((80, 760), "ලෝක", font=font_big, fill="white")
-    draw.text((80, 870), "පුවත්", font=font_big, fill=(255, 60, 60))
-    draw.text((80, 1010), "යාවත්කාලීන කිරීම", font=font_small, fill="white")
+    draw.text((80, 760), "WORLD", font=font_big, fill="white")
+    draw.text((80, 870), "NEWS", font=font_big, fill=(255, 60, 60))
+    draw.text((80, 1010), "UPDATE", font=font_small, fill="white")
 
     img.save(path, quality=95)
 
@@ -421,17 +359,11 @@ def get_news():
     used = load_used()
     news_items = []
 
-    feeds_to_check = FEEDS.copy()
-    random.shuffle(feeds_to_check)
-
-    for feed_url in feeds_to_check:
+    for feed_url in FEEDS:
         try:
-            print("Checking feed:", feed_url)
-
             feed = feedparser.parse(feed_url)
-            source_name = feed.feed.get("title", "News Source")
 
-            for entry in feed.entries[:10]:
+            for entry in feed.entries:
                 title = clean_text(entry.get("title", ""))
                 summary = clean_text(entry.get("summary", ""))
                 link = entry.get("link", "")
@@ -452,8 +384,7 @@ def get_news():
                     "summary": summary,
                     "link": link,
                     "image_url": image_url,
-                    "source": source_name,
-                    "feed_url": feed_url,
+                    "source": feed.feed.get("title", "News Source"),
                 })
 
         except Exception as e:
@@ -462,16 +393,9 @@ def get_news():
     if not news_items:
         return None
 
-    random.shuffle(news_items)
+    news = news_items[0]
 
-    with_image = [item for item in news_items if item.get("image_url")]
-    without_image = [item for item in news_items if not item.get("image_url")]
-
-    if with_image:
-        news = random.choice(with_image)
-    else:
-        news = random.choice(without_image)
-
+    # Try article real image first
     article_image = get_image_from_article_page(news["link"])
 
     if article_image:
@@ -479,17 +403,10 @@ def get_news():
     elif news["image_url"]:
         news["image_url"] = upgrade_image_url(news["image_url"])
 
-    translated_news = translate_news(news)
-
-    if translated_news is None:
-        print("Sinhala translation failed. Skipping this news.")
-        return None
-
     used.append(news["id"])
     save_used(used)
 
-    print("Selected source:", news["source"])
-    return translated_news
+    return news
 
 
 # =========================
@@ -497,15 +414,21 @@ def get_news():
 # =========================
 
 def make_script(news):
-    title = shorten(news["title_si"], 220)
-    summary = shorten(news["summary_si"], MAX_SCRIPT_CHARS)
+    title = shorten(news["title"], 180)
+    summary = shorten(news["summary"], MAX_SCRIPT_CHARS)
 
-    script = f"{title}. {summary}. තවත් ලෝක පුවත් සඳහා අප සමඟ රැඳී සිටින්න."
+    if summary:
+        script = f"{title}. {summary}."
+    else:
+        script = f"{title}."
+
+    script += " Follow for more world news updates."
+
     return script
 
 
 def create_voice(script, path):
-    tts = gTTS(text=script, lang=VOICE_LANGUAGE, slow=False)
+    tts = gTTS(text=script, lang=LANGUAGE, slow=False)
     tts.save(path)
 
 
@@ -548,6 +471,7 @@ def draw_rounded_panel(draw, xy, radius, fill, outline=None, width=1):
 def create_news_frame(news, image_path, progress=0.0):
     original = Image.open(image_path).convert("RGB")
 
+    # Slow professional zoom animation
     zoom = 1.0 + progress * 0.035
 
     crop_w = int(original.width / zoom)
@@ -558,6 +482,7 @@ def create_news_frame(news, image_path, progress=0.0):
 
     original = original.crop((left, top, left + crop_w, top + crop_h))
 
+    # Blurred full background
     bg = cover_resize(original, VIDEO_SIZE)
     bg = bg.filter(ImageFilter.GaussianBlur(radius=18))
     bg = add_dark_gradient(bg)
@@ -565,20 +490,21 @@ def create_news_frame(news, image_path, progress=0.0):
     img = bg.convert("RGBA")
     draw = ImageDraw.Draw(img)
 
+    # Top masthead
     draw.rectangle(
         (0, 0, VIDEO_WIDTH, 175),
         fill=(3, 8, 20, 245)
     )
 
-    mast_font = get_font(48, True)
+    mast_font = get_font(58, True)
     draw.text(
-        (50, 52),
+        (50, 45),
         PAGE_NAME,
         font=mast_font,
         fill="white"
     )
 
-    date_font = get_font(25, False)
+    date_font = get_font(26, False)
     date_text = datetime.now().strftime("%Y-%m-%d")
     draw.text(
         (820, 78),
@@ -587,6 +513,7 @@ def create_news_frame(news, image_path, progress=0.0):
         fill=(210, 220, 235)
     )
 
+    # Breaking news red bar
     draw_rounded_panel(
         draw,
         (50, 205, 1030, 315),
@@ -594,26 +521,27 @@ def create_news_frame(news, image_path, progress=0.0):
         fill=(190, 18, 32, 245),
     )
 
-    breaking_font = get_font(42, True)
+    breaking_font = get_font(45, True)
     draw.text(
-        (92, 237),
-        "නවතම ලෝක පුවත්",
+        (92, 234),
+        "BREAKING NEWS UPDATE",
         font=breaking_font,
         fill="white"
     )
 
     draw.ellipse(
-        (900, 244, 930, 274),
+        (915, 243, 945, 273),
         fill="white"
     )
 
     draw.text(
-        (945, 237),
+        (958, 235),
         "LIVE",
-        font=get_font(32, True),
+        font=get_font(34, True),
         fill="white"
     )
 
+    # Sharp main photo card
     photo_x1 = 50
     photo_y1 = 360
     photo_x2 = 1030
@@ -627,6 +555,7 @@ def create_news_frame(news, image_path, progress=0.0):
 
     mask = Image.new("L", (photo_w, photo_h), 0)
     mask_draw = ImageDraw.Draw(mask)
+
     mask_draw.rounded_rectangle(
         (0, 0, photo_w, photo_h),
         radius=38,
@@ -646,6 +575,7 @@ def create_news_frame(news, image_path, progress=0.0):
         width=3,
     )
 
+    # Bottom text panel
     panel_top = 1125
     panel_bottom = 1870
 
@@ -664,16 +594,17 @@ def create_news_frame(news, image_path, progress=0.0):
         fill=(235, 30, 45),
     )
 
-    title = shorten(news["title_si"], 160)
-    summary = shorten(news["summary_si"], 420)
+    title = shorten(news["title"], 145)
+    summary = shorten(news["summary"], 360)
 
+    # Headline auto-fit
     title_font, title_lines, title_lh = fit_text_to_box(
         draw=draw,
         text=title,
         max_width=900,
-        max_height=300,
-        start_size=50,
-        min_size=30,
+        max_height=285,
+        start_size=58,
+        min_size=36,
         bold=True,
     )
 
@@ -689,6 +620,7 @@ def create_news_frame(news, image_path, progress=0.0):
         fill="white",
     )
 
+    # Summary auto-fit
     summary_y = y + 38
 
     if summary:
@@ -697,8 +629,8 @@ def create_news_frame(news, image_path, progress=0.0):
             text=summary,
             max_width=900,
             max_height=310,
-            start_size=34,
-            min_size=24,
+            start_size=37,
+            min_size=27,
             bold=False,
         )
 
@@ -713,8 +645,9 @@ def create_news_frame(news, image_path, progress=0.0):
         )
 
     if SHOW_SOURCE_TEXT:
-        source_font = get_font(22, False)
+        source_font = get_font(25, False)
         source = shorten(news.get("source", ""), 60)
+
         draw.text(
             (75, 1810),
             f"Source: {source}",
@@ -760,86 +693,6 @@ def create_video(news, image_path, audio_path, output_path):
     video.close()
 
 
-
-
-# =========================
-# TELEGRAM NOTIFICATION
-# =========================
-
-def get_telegram_settings():
-    bot_token = os.getenv("8467040279:AAGIxfp1OSdl-yojYXXQi1DrAwoHgPzvUkI")
-    chat_id = os.getenv("8376417027")
-
-    if not bot_token or not chat_id:
-        print("Telegram notification skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID missing.")
-        return None, None
-
-    return bot_token, chat_id
-
-
-def make_telegram_caption(news):
-    title = shorten(news.get("title_si", news.get("title", "")), 180)
-    summary = shorten(news.get("summary_si", news.get("summary", "")), 450)
-    link = news.get("link", "")
-
-    caption = "✅ නව පුවත් වීඩියෝවක් සෑදී ඇත\n\n"
-    caption += f"{title}\n\n"
-
-    if summary:
-        caption += f"{summary}\n\n"
-
-    if link:
-        caption += f"Source: {link}"
-
-    return caption[:1000]
-
-
-def notify_telegram_with_video(video_path, news):
-    bot_token, chat_id = get_telegram_settings()
-
-    if not bot_token or not chat_id:
-        return False
-
-    try:
-        url = f"https://api.telegram.org/bot{bot_token}/sendVideo"
-        caption = make_telegram_caption(news)
-
-        with open(video_path, "rb") as video_file:
-            files = {"video": video_file}
-            data = {
-                "chat_id": chat_id,
-                "caption": caption,
-                "supports_streaming": "true",
-            }
-
-            response = requests.post(
-                url,
-                data=data,
-                files=files,
-                timeout=300,
-            )
-
-        print("Telegram status:", response.status_code)
-        print("Telegram response:", response.text)
-
-        try:
-            result = response.json()
-        except Exception:
-            print("Telegram raw response:", response.text)
-            return False
-
-        if response.status_code == 200 and result.get("ok"):
-            print("Telegram notification sent successfully.")
-            return True
-
-        print("Telegram notification failed.")
-        return False
-
-    except Exception as e:
-        print("Telegram notification error:", e)
-        return False
-
-
 # =========================
 # MAIN
 # =========================
@@ -851,12 +704,10 @@ def main():
     news = get_news()
 
     if not news:
-        print("No valid Sinhala news found.")
+        print("No fresh news found.")
         return
 
-    print("Selected English news:", news["title"])
-    print("Selected Sinhala news:", news["title_si"])
-    print("Selected source:", news["source"])
+    print("Selected news:", news["title"])
     print("Link:", news["link"])
     print("Image:", news["image_url"])
 
@@ -872,25 +723,13 @@ def main():
 
     script = make_script(news)
 
-    if not has_sinhala(script):
-        print("Sinhala script check failed. Skipping video.")
-        return
-
-    print("Creating Sinhala voice...")
+    print("Creating voice...")
     create_voice(script, voice_path)
 
-    print("Creating Sinhala video...")
+    print("Creating video...")
     create_video(news, raw_image_path, voice_path, video_path)
 
     print("Video created:", video_path)
-
-    print("Sending Telegram notification...")
-    telegram_ok = notify_telegram_with_video(video_path, news)
-
-    if telegram_ok:
-        print("Telegram notification completed.")
-    else:
-        print("Telegram notification failed or skipped.")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,44 @@
+name: Sinhala World News Video Bot
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create-and-post:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install FFmpeg and Sinhala fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-core fonts-noto-extra
+
+      - name: Install Python packages
+        run: pip install -r requirements.txt
+
+      - name: Run Sinhala news bot
+        env:
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+        run: python bot.py
+
+      - name: Save memory and output
+        run: |
+          git config user.name "sinhala-news-bot"
+          git config user.email "bot@example.com"
+          git add used.json output || true
+          git commit -m "Update Sinhala news video memory" || echo "No changes to commit"
+          git push

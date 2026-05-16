@@ -25,6 +25,7 @@ from moviepy import (
 # =========================
 
 PAGE_NAME = "WORLD NEWS IN SINHALA"
+CHANNEL_NAME_SI = "වර්ල්ඩ් නිව්ස් ඉන් සිංහල"
 
 OUTPUT_DIR = "output"
 ASSET_DIR = "assets"
@@ -42,7 +43,6 @@ MAX_SCRIPT_CHARS = 750
 
 SHOW_SOURCE_TEXT = False
 
-GRAPH_VERSION = "v22.0"
 
 FEEDS = [
     "https://www.bbc.com/news/world/rss.xml",
@@ -72,6 +72,38 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/120.0 Safari/537.36"
 )
+
+
+# Words/names that Google Translate can wrongly translate as normal Sinhala words.
+# Keep brand/source names clean in Sinhala text and voice.
+BRAND_TEXT_FIXES = {
+    "නාලිකා නිව්ස්ඒෂියා": "Channel NewsAsia",
+    "චැනල් නිව්ස්ඒෂියා": "Channel NewsAsia",
+    "චැනල් නිව්ස් ඒෂියා": "Channel NewsAsia",
+    "නාලිකා පුවත් ආසියාව": "Channel NewsAsia",
+    "බීබීසී": "BBC",
+    "බී.බී.සී.": "BBC",
+    "අල් ජසීරා": "Al Jazeera",
+    "අල්-ජසීරා": "Al Jazeera",
+    "ගාර්ඩියන්": "The Guardian",
+    "නිව්යෝර්ක් ටයිම්ස්": "The New York Times",
+    "එන්පීආර්": "NPR",
+    "සීඑන්බීසී": "CNBC",
+    "සීඑන්එන්": "CNN",
+    "ඩීඩබ්ලිව්": "DW",
+    "ප්‍රංශය 24": "France 24",
+}
+
+
+def fix_brand_translation(text):
+    """Fix common machine-translation mistakes in source/channel names."""
+    text = clean_text(text)
+
+    for wrong, correct in BRAND_TEXT_FIXES.items():
+        text = text.replace(wrong, correct)
+
+    # Clean weird repeated spaces after replacements.
+    return re.sub(r"\s+", " ", text).strip()
 
 
 # =========================
@@ -110,7 +142,7 @@ def translate_to_sinhala(text, max_chars=1200):
 
     try:
         translated = GoogleTranslator(source="auto", target=TRANSLATE_TO).translate(text)
-        translated = clean_text(translated)
+        translated = fix_brand_translation(translated)
 
         # If translation did not return Sinhala, reject it.
         if not has_sinhala(translated):
@@ -501,8 +533,9 @@ def make_script(news):
     title = shorten(news["title_si"], 220)
     summary = shorten(news["summary_si"], MAX_SCRIPT_CHARS)
 
-    script = f"{title}. {summary}. තවත් ලෝක පුවත් සඳහා අප සමඟ රැඳී සිටින්න."
-    return script
+    # Keep the channel name out of Google Translate. This avoids broken channel-name audio.
+    script = f"{title}. {summary}. තවත් ලෝක පුවත් සඳහා {CHANNEL_NAME_SI} සමඟ රැඳී සිටින්න."
+    return fix_brand_translation(script)
 
 
 def create_voice(script, path):
@@ -762,194 +795,6 @@ def create_video(news, image_path, audio_path, output_path):
 
 
 # =========================
-# FACEBOOK UPLOAD
-# =========================
-
-def get_facebook_settings():
-    page_id = os.getenv("FB_PAGE_ID")
-    page_token = os.getenv("FB_PAGE_TOKEN")
-
-    if not page_id or not page_token:
-        print("Facebook upload skipped: FB_PAGE_ID or FB_PAGE_TOKEN missing.")
-        return None, None
-
-    return page_id, page_token
-
-
-def make_facebook_caption(news):
-    title = shorten(news.get("title_si", ""), 180)
-    summary = shorten(news.get("summary_si", ""), 450)
-    link = news.get("link", "")
-
-    caption = f"{title}\n\n"
-
-    if summary:
-        caption += f"{summary}\n\n"
-
-    caption += "තවත් ලෝක පුවත් සඳහා World News in Sinhala අනුගමනය කරන්න."
-
-    if link:
-        caption += f"\n\nවැඩිදුර කියවන්න: {link}"
-
-    return caption
-
-
-def post_facebook_reel(video_path, caption):
-    page_id, page_token = get_facebook_settings()
-
-    if not page_id or not page_token:
-        return False
-
-    try:
-        print("Starting Facebook Reel upload...")
-
-        start_url = f"https://graph.facebook.com/{GRAPH_VERSION}/{page_id}/video_reels"
-
-        start_params = {
-            "upload_phase": "start",
-            "access_token": page_token,
-        }
-
-        start_response = requests.post(
-            start_url,
-            data=start_params,
-            timeout=60,
-        )
-
-        try:
-            start_data = start_response.json()
-        except Exception:
-            print("Reel start raw response:", start_response.text)
-            return False
-
-        print("Reel start response:", start_data)
-
-        if start_response.status_code not in [200, 201]:
-            return False
-
-        if "video_id" not in start_data or "upload_url" not in start_data:
-            return False
-
-        video_id = start_data["video_id"]
-        upload_url = start_data["upload_url"]
-        file_size = os.path.getsize(video_path)
-
-        with open(video_path, "rb") as video_file:
-            upload_headers = {
-                "Authorization": f"OAuth {page_token}",
-                "offset": "0",
-                "file_size": str(file_size),
-                "Content-Type": "application/octet-stream",
-            }
-
-            upload_response = requests.post(
-                upload_url,
-                headers=upload_headers,
-                data=video_file,
-                timeout=300,
-            )
-
-        print("Reel upload status:", upload_response.status_code)
-        print("Reel upload response:", upload_response.text)
-
-        if upload_response.status_code not in [200, 201]:
-            return False
-
-        finish_url = f"https://graph.facebook.com/{GRAPH_VERSION}/{page_id}/video_reels"
-
-        finish_params = {
-            "upload_phase": "finish",
-            "video_id": video_id,
-            "description": caption,
-            "video_state": "PUBLISHED",
-            "access_token": page_token,
-        }
-
-        finish_response = requests.post(
-            finish_url,
-            data=finish_params,
-            timeout=120,
-        )
-
-        try:
-            finish_data = finish_response.json()
-        except Exception:
-            print("Reel finish raw response:", finish_response.text)
-            return False
-
-        print("Reel finish response:", finish_data)
-
-        if finish_response.status_code in [200, 201] and not finish_data.get("error"):
-            print("Facebook Reel published successfully.")
-            return True
-
-        return False
-
-    except Exception as e:
-        print("Facebook Reel error:", e)
-        return False
-
-
-def post_facebook_video_post(video_path, caption):
-    page_id, page_token = get_facebook_settings()
-
-    if not page_id or not page_token:
-        return False
-
-    try:
-        print("Trying normal Facebook video post...")
-
-        url = f"https://graph.facebook.com/{GRAPH_VERSION}/{page_id}/videos"
-
-        data = {
-            "description": caption,
-            "access_token": page_token,
-        }
-
-        with open(video_path, "rb") as video_file:
-            files = {
-                "source": video_file
-            }
-
-            response = requests.post(
-                url,
-                data=data,
-                files=files,
-                timeout=300,
-            )
-
-        try:
-            result = response.json()
-        except Exception:
-            print("Video post raw response:", response.text)
-            return False
-
-        print("Video post response:", result)
-
-        if response.status_code in [200, 201] and not result.get("error"):
-            print("Facebook video post published successfully.")
-            return True
-
-        return False
-
-    except Exception as e:
-        print("Facebook video post error:", e)
-        return False
-
-
-def upload_to_facebook(video_path, news):
-    caption = make_facebook_caption(news)
-
-    reel_ok = post_facebook_reel(video_path, caption)
-
-    if reel_ok:
-        return True
-
-    print("Reel failed. Trying normal video post...")
-    return post_facebook_video_post(video_path, caption)
-
-
-# =========================
 # MAIN
 # =========================
 
@@ -992,14 +837,7 @@ def main():
     create_video(news, raw_image_path, voice_path, video_path)
 
     print("Video created:", video_path)
-
-    print("Uploading to Facebook...")
-    facebook_ok = upload_to_facebook(video_path, news)
-
-    if facebook_ok:
-        print("Facebook upload completed.")
-    else:
-        print("Facebook upload failed or skipped.")
+    print("Posting disabled: Facebook and Telegram upload code was removed.")
 
 
 if __name__ == "__main__":

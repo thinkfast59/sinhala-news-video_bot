@@ -13,13 +13,8 @@ from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from gtts import gTTS
 from deep_translator import GoogleTranslator
-
 from moviepy import VideoClip, AudioFileClip
 
-
-# =========================
-# SETTINGS
-# =========================
 
 PAGE_NAME = "ලෝක පුවත් සිංහලෙන්"
 CHANNEL_NAME_SI = "ලෝක පුවත් සිංහලෙන්"
@@ -34,9 +29,10 @@ VIDEO_SIZE = (VIDEO_WIDTH, VIDEO_HEIGHT)
 
 VOICE_LANGUAGE = "si"
 TRANSLATE_TO = "si"
-
 MAX_SCRIPT_CHARS = 750
-SHOW_SOURCE_TEXT = False
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 FEEDS = [
     "https://www.bbc.com/news/world/rss.xml",
@@ -45,79 +41,35 @@ FEEDS = [
     "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
     "https://feeds.npr.org/1004/rss.xml",
     "https://www.france24.com/en/rss",
-    "https://www.dw.com/en/top-stories/s-9097?maca=en-rss-en-all-1573-rdf",
     "https://www.theguardian.com/world/rss",
     "https://www.cbc.ca/cmlink/rss-world",
     "https://www.thehindu.com/news/international/feeder/default.rss",
     "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms",
     "https://www.hindustantimes.com/feeds/rss/world-news/rssfeed.xml",
     "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml",
-    "https://www.scmp.com/rss/91/feed",
     "https://www.middleeasteye.net/rss",
-    "https://www.arabnews.com/rss.xml",
     "https://feeds.bbci.co.uk/news/business/rss.xml",
     "https://feeds.bbci.co.uk/news/technology/rss.xml",
-    "https://www.theguardian.com/technology/rss",
-    "https://www.theguardian.com/science/rss",
 ]
 
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0 Safari/537.36"
-)
+USER_AGENT = "Mozilla/5.0 Chrome/120.0 Safari/537.36"
 
-BRAND_TEXT_FIXES = {
-    "නාලිකා නිව්ස්ඒෂියා": "Channel NewsAsia",
-    "චැනල් නිව්ස්ඒෂියා": "Channel NewsAsia",
-    "චැනල් නිව්ස් ඒෂියා": "Channel NewsAsia",
-    "නාලිකා පුවත් ආසියාව": "Channel NewsAsia",
-    "බීබීසී": "BBC",
-    "බී.බී.සී.": "BBC",
-    "අල් ජසීරා": "Al Jazeera",
-    "අල්-ජසීරා": "Al Jazeera",
-    "ගාර්ඩියන්": "The Guardian",
-    "නිව්යෝර්ක් ටයිම්ස්": "The New York Times",
-    "එන්පීආර්": "NPR",
-    "සීඑන්බීසී": "CNBC",
-    "සීඑන්එන්": "CNN",
-    "ඩීඩබ්ලිව්": "DW",
-    "ප්‍රංශය 24": "France 24",
-}
-
-
-# =========================
-# TEXT CLEANING
-# =========================
 
 def clean_text(text):
     text = BeautifulSoup(text or "", "html.parser").get_text(" ")
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def shorten(text, max_chars):
     text = clean_text(text)
     if len(text) <= max_chars:
         return text
-    cut = text[:max_chars].rsplit(" ", 1)[0]
-    return cut + "..."
+    return text[:max_chars].rsplit(" ", 1)[0] + "..."
 
 
 def has_sinhala(text):
     return bool(re.search(r"[\u0D80-\u0DFF]", text or ""))
 
-
-def fix_brand_translation(text):
-    text = clean_text(text)
-    for wrong, correct in BRAND_TEXT_FIXES.items():
-        text = text.replace(wrong, correct)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-# =========================
-# TRANSLATION
-# =========================
 
 def translate_to_sinhala(text, max_chars=1200):
     text = shorten(text, max_chars)
@@ -126,41 +78,16 @@ def translate_to_sinhala(text, max_chars=1200):
 
     try:
         translated = GoogleTranslator(source="auto", target=TRANSLATE_TO).translate(text)
-        translated = fix_brand_translation(translated)
+        translated = clean_text(translated)
 
         if not has_sinhala(translated):
-            print("Translation rejected: no Sinhala characters found.")
             return ""
 
         return translated
-
     except Exception as e:
         print("Translation failed:", e)
         return ""
 
-
-def translate_news(news):
-    english_title = clean_text(news.get("title", ""))
-    english_summary = clean_text(news.get("summary", ""))
-
-    sinhala_title = translate_to_sinhala(english_title, 250)
-    sinhala_summary = translate_to_sinhala(english_summary, 900)
-
-    if not sinhala_title:
-        return None
-
-    if not sinhala_summary:
-        sinhala_summary = sinhala_title
-
-    news["title_si"] = sinhala_title
-    news["summary_si"] = sinhala_summary
-
-    return news
-
-
-# =========================
-# USED MEMORY
-# =========================
 
 def load_used():
     if os.path.exists(USED_FILE):
@@ -177,38 +104,27 @@ def save_used(used):
         json.dump(used[-1000:], f, indent=2, ensure_ascii=False)
 
 
-# =========================
-# FONTS
-# =========================
-
 def get_font(size, bold=False):
     if bold:
-        font_paths = [
+        paths = [
             "/usr/share/fonts/truetype/noto/NotoSansSinhala-Bold.ttf",
             "/usr/share/fonts/truetype/noto/NotoSerifSinhala-Bold.ttf",
             "/usr/share/fonts/opentype/noto/NotoSansSinhala-Bold.ttf",
-            "/usr/share/fonts/opentype/noto/NotoSerifSinhala-Bold.ttf",
             "assets/NotoSansSinhala-Bold.ttf",
-            "assets/NotoSerifSinhala-Bold.ttf",
         ]
     else:
-        font_paths = [
+        paths = [
             "/usr/share/fonts/truetype/noto/NotoSansSinhala-Regular.ttf",
             "/usr/share/fonts/truetype/noto/NotoSerifSinhala-Regular.ttf",
             "/usr/share/fonts/opentype/noto/NotoSansSinhala-Regular.ttf",
-            "/usr/share/fonts/opentype/noto/NotoSerifSinhala-Regular.ttf",
             "assets/NotoSansSinhala-Regular.ttf",
-            "assets/NotoSerifSinhala-Regular.ttf",
         ]
 
-    for path in font_paths:
+    for path in paths:
         if os.path.exists(path):
-            try:
-                return ImageFont.truetype(path, size)
-            except Exception:
-                pass
+            return ImageFont.truetype(path, size)
 
-    print("WARNING: Sinhala font not found. Text may show square boxes.")
+    print("WARNING: Sinhala font not found.")
     return ImageFont.load_default()
 
 
@@ -224,9 +140,9 @@ def wrap_text(draw, text, font, max_width):
 
     for word in words:
         test = current + " " + word if current else word
-        width, _ = text_size(draw, test, font)
+        w, _ = text_size(draw, test, font)
 
-        if width <= max_width:
+        if w <= max_width:
             current = test
         else:
             if current:
@@ -243,16 +159,13 @@ def fit_text_to_box(draw, text, max_width, max_height, start_size, min_size, bol
     for size in range(start_size, min_size - 1, -2):
         font = get_font(size, bold)
         lines = wrap_text(draw, text, font, max_width)
-        line_height = int(size * 1.35)
-        total_height = len(lines) * line_height
+        lh = int(size * 1.35)
 
-        if total_height <= max_height:
-            return font, lines, line_height
+        if len(lines) * lh <= max_height:
+            return font, lines, lh
 
     font = get_font(min_size, bold)
-    lines = wrap_text(draw, text, font, max_width)
-    line_height = int(min_size * 1.35)
-    return font, lines, line_height
+    return font, wrap_text(draw, text, font, max_width), int(min_size * 1.35)
 
 
 def draw_multiline(draw, lines, x, y, font, line_height, fill):
@@ -260,135 +173,6 @@ def draw_multiline(draw, lines, x, y, font, line_height, fill):
         draw.text((x, y), line, font=font, fill=fill)
         y += line_height
     return y
-
-
-# =========================
-# IMAGE SYSTEM
-# =========================
-
-def upgrade_image_url(url):
-    if not url:
-        return None
-
-    upgraded = url
-
-    replacements = [
-        "/standard/240/",
-        "/standard/320/",
-        "/standard/480/",
-        "/standard/624/",
-        "/standard/800/",
-        "/ace/standard/240/",
-        "/ace/standard/320/",
-        "/ace/standard/480/",
-        "/ace/standard/624/",
-        "/ace/standard/800/",
-    ]
-
-    for old in replacements:
-        size_part = old.split("/")[-2]
-        upgraded = upgraded.replace(old, old.replace(size_part, "1024"))
-
-    return upgraded
-
-
-def get_image_from_feed_entry(entry):
-    media_content = entry.get("media_content", [])
-    if media_content:
-        for media in media_content:
-            url = media.get("url")
-            if url:
-                return upgrade_image_url(url)
-
-    media_thumbnail = entry.get("media_thumbnail", [])
-    if media_thumbnail:
-        for media in media_thumbnail:
-            url = media.get("url")
-            if url:
-                return upgrade_image_url(url)
-
-    links = entry.get("links", [])
-    for link in links:
-        href = link.get("href", "")
-        media_type = link.get("type", "")
-        if href and "image" in media_type:
-            return upgrade_image_url(href)
-
-    return None
-
-
-def get_image_from_article_page(article_url):
-    try:
-        response = requests.get(
-            article_url,
-            headers={"User-Agent": USER_AGENT},
-            timeout=15,
-        )
-
-        if response.status_code != 200:
-            return None
-
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        meta_tags = [
-            ("meta", {"property": "og:image"}),
-            ("meta", {"name": "twitter:image"}),
-            ("meta", {"property": "twitter:image"}),
-        ]
-
-        for tag_name, attrs in meta_tags:
-            tag = soup.find(tag_name, attrs=attrs)
-            if tag and tag.get("content"):
-                return upgrade_image_url(tag.get("content"))
-
-    except Exception as e:
-        print("Article image fetch error:", e)
-
-    return None
-
-
-def download_image(url, output_path):
-    if not url:
-        return False
-
-    urls_to_try = []
-    upgraded_url = upgrade_image_url(url)
-
-    if upgraded_url:
-        urls_to_try.append(upgraded_url)
-
-    if url not in urls_to_try:
-        urls_to_try.append(url)
-
-    for try_url in urls_to_try:
-        try:
-            print("Trying image:", try_url)
-
-            response = requests.get(
-                try_url,
-                headers={"User-Agent": USER_AGENT},
-                timeout=20,
-            )
-
-            if response.status_code != 200:
-                print("Image status code:", response.status_code)
-                continue
-
-            img = Image.open(BytesIO(response.content)).convert("RGB")
-
-            if img.width < 120 or img.height < 120:
-                print("Image too small:", img.width, img.height)
-                continue
-
-            print("Image downloaded:", img.width, img.height)
-
-            img.save(output_path, quality=95)
-            return True
-
-        except Exception as e:
-            print("Image download failed:", e)
-
-    return False
 
 
 def cover_resize(img, size):
@@ -405,6 +189,67 @@ def cover_resize(img, size):
     top = (new_h - target_h) // 2
 
     return img.crop((left, top, left + target_w, top + target_h))
+
+
+def get_image_from_feed_entry(entry):
+    for key in ["media_content", "media_thumbnail"]:
+        media = entry.get(key, [])
+        for item in media:
+            if item.get("url"):
+                return item.get("url")
+
+    for link in entry.get("links", []):
+        if "image" in link.get("type", ""):
+            return link.get("href")
+
+    return None
+
+
+def get_image_from_article_page(article_url):
+    try:
+        r = requests.get(article_url, headers={"User-Agent": USER_AGENT}, timeout=15)
+        if r.status_code != 200:
+            return None
+
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        for attrs in [
+            {"property": "og:image"},
+            {"name": "twitter:image"},
+            {"property": "twitter:image"},
+        ]:
+            tag = soup.find("meta", attrs=attrs)
+            if tag and tag.get("content"):
+                return tag.get("content")
+
+    except Exception as e:
+        print("Article image error:", e)
+
+    return None
+
+
+def download_image(url, output_path):
+    if not url:
+        return False
+
+    try:
+        r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=25)
+
+        if r.status_code != 200:
+            print("Image status:", r.status_code)
+            return False
+
+        img = Image.open(BytesIO(r.content)).convert("RGB")
+
+        if img.width < 120 or img.height < 120:
+            return False
+
+        img.save(output_path, quality=95)
+        return True
+
+    except Exception as e:
+        print("Image download failed:", e)
+        return False
 
 
 def create_fallback_news_image(path):
@@ -428,23 +273,17 @@ def create_fallback_news_image(path):
     img.save(path, quality=95)
 
 
-# =========================
-# NEWS COLLECTION
-# =========================
-
 def get_news():
     used = load_used()
     news_items = []
 
-    feeds_to_check = FEEDS.copy()
-    random.shuffle(feeds_to_check)
+    feeds = FEEDS.copy()
+    random.shuffle(feeds)
 
-    for feed_url in feeds_to_check:
+    for feed_url in feeds:
         try:
             print("Checking feed:", feed_url)
-
             feed = feedparser.parse(feed_url)
-            source_name = feed.feed.get("title", "News Source")
 
             for entry in feed.entries[:10]:
                 title = clean_text(entry.get("title", ""))
@@ -459,66 +298,55 @@ def get_news():
                 if news_id in used:
                     continue
 
-                image_url = get_image_from_feed_entry(entry)
-
                 news_items.append({
                     "id": news_id,
                     "title": title,
                     "summary": summary,
                     "link": link,
-                    "image_url": image_url,
-                    "source": source_name,
-                    "feed_url": feed_url,
+                    "image_url": get_image_from_feed_entry(entry),
+                    "source": feed.feed.get("title", "News Source"),
                 })
 
         except Exception as e:
-            print("Feed error:", feed_url, e)
+            print("Feed error:", e)
 
     if not news_items:
         return None
 
     random.shuffle(news_items)
-
-    with_image = [item for item in news_items if item.get("image_url")]
-    without_image = [item for item in news_items if not item.get("image_url")]
-
-    news = random.choice(with_image) if with_image else random.choice(without_image)
+    news = random.choice(news_items)
 
     article_image = get_image_from_article_page(news["link"])
-
     if article_image:
         news["image_url"] = article_image
-    elif news["image_url"]:
-        news["image_url"] = upgrade_image_url(news["image_url"])
 
-    translated_news = translate_news(news)
+    title_si = translate_to_sinhala(news["title"], 250)
+    summary_si = translate_to_sinhala(news["summary"], 900)
 
-    if translated_news is None:
-        print("Sinhala translation failed. Skipping this news.")
+    if not title_si:
         return None
+
+    if not summary_si:
+        summary_si = title_si
+
+    news["title_si"] = title_si
+    news["summary_si"] = summary_si
 
     used.append(news["id"])
     save_used(used)
 
-    print("Selected source:", news["source"])
-    return translated_news
+    return news
 
-
-# =========================
-# VOICE SCRIPT
-# =========================
 
 def make_script(news):
     title = shorten(news["title_si"], 220)
     summary = shorten(news["summary_si"], MAX_SCRIPT_CHARS)
 
-    script = (
+    return (
         f"{title}. "
         f"{summary}. "
         f"තවත් ලෝක පුවත් සඳහා {CHANNEL_NAME_SI} සමඟ රැඳී සිටින්න."
     )
-
-    return fix_brand_translation(script)
 
 
 def create_voice(script, path):
@@ -526,40 +354,22 @@ def create_voice(script, path):
     tts.save(path)
 
 
-# =========================
-# VIDEO DESIGN
-# =========================
-
 def add_dark_gradient(img):
     overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
     for y in range(VIDEO_HEIGHT):
         if y < 620:
-            alpha = int(95 + 85 * (1 - y / 620))
+            alpha = int(150 - y / 620 * 50)
         elif y > 1080:
             alpha = int(70 + 160 * ((y - 1080) / 840))
         else:
-            alpha = 35
+            alpha = 45
 
         alpha = max(0, min(230, alpha))
-
-        draw.line(
-            [(0, y), (VIDEO_WIDTH, y)],
-            fill=(0, 0, 0, alpha)
-        )
+        draw.line([(0, y), (VIDEO_WIDTH, y)], fill=(0, 0, 0, alpha))
 
     return Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
-
-
-def draw_rounded_panel(draw, xy, radius, fill, outline=None, width=1):
-    draw.rounded_rectangle(
-        xy,
-        radius=radius,
-        fill=fill,
-        outline=outline,
-        width=width,
-    )
 
 
 def create_news_frame(news, image_path, progress=0.0):
@@ -581,169 +391,121 @@ def create_news_frame(news, image_path, progress=0.0):
     img = bg.convert("RGBA")
     draw = ImageDraw.Draw(img)
 
-    draw.rectangle(
-        (0, 0, VIDEO_WIDTH, 175),
-        fill=(3, 8, 20, 245)
-    )
+    draw.rectangle((0, 0, VIDEO_WIDTH, 175), fill=(3, 8, 20, 245))
 
-    mast_font = get_font(48, True)
     draw.text(
         (50, 52),
         PAGE_NAME,
-        font=mast_font,
+        font=get_font(48, True),
         fill="white"
     )
 
-    date_font = get_font(25, False)
-    date_text = datetime.now().strftime("%Y-%m-%d")
     draw.text(
         (820, 78),
-        date_text,
-        font=date_font,
+        datetime.now().strftime("%Y-%m-%d"),
+        font=get_font(25, False),
         fill=(210, 220, 235)
     )
 
-    draw_rounded_panel(
-        draw,
+    draw.rounded_rectangle(
         (50, 205, 1030, 315),
-        28,
-        fill=(190, 18, 32, 245),
+        radius=28,
+        fill=(190, 18, 32, 245)
     )
 
-    breaking_font = get_font(42, True)
     draw.text(
         (92, 237),
         "නවතම ලෝක පුවත්",
-        font=breaking_font,
+        font=get_font(42, True),
         fill="white"
     )
 
-    draw.ellipse(
-        (900, 244, 930, 274),
-        fill="white"
-    )
+    draw.ellipse((900, 244, 930, 274), fill="white")
+    draw.text((945, 237), "LIVE", font=get_font(32, True), fill="white")
 
-    draw.text(
-        (945, 237),
-        "LIVE",
-        font=get_font(32, True),
-        fill="white"
-    )
+    photo_x1, photo_y1 = 50, 360
+    photo_x2, photo_y2 = 1030, 1085
 
-    photo_x1 = 50
-    photo_y1 = 360
-    photo_x2 = 1030
-    photo_y2 = 1085
-
-    photo_w = photo_x2 - photo_x1
-    photo_h = photo_y2 - photo_y1
-
-    photo = cover_resize(original, (photo_w, photo_h))
+    photo = cover_resize(original, (photo_x2 - photo_x1, photo_y2 - photo_y1))
     photo = photo.filter(ImageFilter.SHARPEN)
 
-    mask = Image.new("L", (photo_w, photo_h), 0)
+    mask = Image.new("L", photo.size, 0)
     mask_draw = ImageDraw.Draw(mask)
-    mask_draw.rounded_rectangle(
-        (0, 0, photo_w, photo_h),
-        radius=38,
-        fill=255,
-    )
+    mask_draw.rounded_rectangle((0, 0, photo.size[0], photo.size[1]), radius=38, fill=255)
 
-    img.paste(
-        photo.convert("RGBA"),
-        (photo_x1, photo_y1),
-        mask
-    )
+    img.paste(photo.convert("RGBA"), (photo_x1, photo_y1), mask)
 
     draw.rounded_rectangle(
         (photo_x1, photo_y1, photo_x2, photo_y2),
         radius=38,
         outline=(255, 255, 255, 85),
-        width=3,
+        width=3
     )
 
     panel_top = 1125
     panel_bottom = 1870
 
-    draw_rounded_panel(
-        draw,
+    draw.rounded_rectangle(
         (40, panel_top, 1040, panel_bottom),
-        38,
+        radius=38,
         fill=(5, 12, 28, 232),
         outline=(255, 255, 255, 60),
-        width=2,
+        width=2
     )
 
     draw.rounded_rectangle(
         (75, panel_top + 45, 235, panel_top + 60),
         radius=8,
-        fill=(235, 30, 45),
+        fill=(235, 30, 45)
     )
 
     title = shorten(news["title_si"], 160)
     summary = shorten(news["summary_si"], 420)
 
     title_font, title_lines, title_lh = fit_text_to_box(
-        draw=draw,
-        text=title,
-        max_width=900,
-        max_height=300,
-        start_size=50,
-        min_size=30,
-        bold=True,
+        draw,
+        title,
+        900,
+        300,
+        50,
+        30,
+        True
     )
 
     y = panel_top + 90
 
     y = draw_multiline(
-        draw=draw,
-        lines=title_lines,
-        x=75,
-        y=y,
-        font=title_font,
-        line_height=title_lh,
-        fill="white",
+        draw,
+        title_lines,
+        75,
+        y,
+        title_font,
+        title_lh,
+        "white"
     )
 
-    summary_y = y + 38
+    summary_font, summary_lines, summary_lh = fit_text_to_box(
+        draw,
+        summary,
+        900,
+        310,
+        34,
+        24,
+        False
+    )
 
-    if summary:
-        summary_font, summary_lines, summary_lh = fit_text_to_box(
-            draw=draw,
-            text=summary,
-            max_width=900,
-            max_height=310,
-            start_size=34,
-            min_size=24,
-            bold=False,
-        )
-
-        draw_multiline(
-            draw=draw,
-            lines=summary_lines[:7],
-            x=75,
-            y=summary_y,
-            font=summary_font,
-            line_height=summary_lh,
-            fill=(230, 235, 245),
-        )
-
-    if SHOW_SOURCE_TEXT:
-        source_font = get_font(22, False)
-        source = shorten(news.get("source", ""), 60)
-        draw.text(
-            (75, 1810),
-            f"Source: {source}",
-            font=source_font,
-            fill=(200, 205, 215),
-        )
+    draw_multiline(
+        draw,
+        summary_lines[:7],
+        75,
+        y + 38,
+        summary_font,
+        summary_lh,
+        (230, 235, 245)
+    )
 
     return img.convert("RGB")
 
-
-# =========================
-# CREATE VIDEO
-# =========================
 
 def create_video(news, image_path, audio_path, output_path):
     audio = AudioFileClip(audio_path)
@@ -751,13 +513,7 @@ def create_video(news, image_path, audio_path, output_path):
 
     def make_frame(t):
         progress = min(1.0, t / max(duration, 1))
-
-        frame = create_news_frame(
-            news=news,
-            image_path=image_path,
-            progress=progress,
-        )
-
+        frame = create_news_frame(news, image_path, progress)
         return np.array(frame)
 
     video = VideoClip(make_frame, duration=duration)
@@ -776,9 +532,31 @@ def create_video(news, image_path, audio_path, output_path):
     video.close()
 
 
-# =========================
-# MAIN
-# =========================
+def upload_to_telegram(video_path, caption):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Telegram credentials missing.")
+        return
+
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
+
+        with open(video_path, "rb") as video_file:
+            response = requests.post(
+                url,
+                data={
+                    "chat_id": TELEGRAM_CHAT_ID,
+                    "caption": caption,
+                    "parse_mode": "HTML",
+                },
+                files={"video": video_file},
+                timeout=300
+            )
+
+        print("Telegram response:", response.text)
+
+    except Exception as e:
+        print("Telegram upload failed:", e)
+
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -790,36 +568,30 @@ def main():
         print("No valid Sinhala news found.")
         return
 
-    print("Selected English news:", news["title"])
-    print("Selected Sinhala news:", news["title_si"])
-    print("Selected source:", news["source"])
-    print("Link:", news["link"])
-    print("Image:", news["image_url"])
+    print("Selected:", news["title_si"])
 
     raw_image_path = os.path.join(ASSET_DIR, "news_image.jpg")
     voice_path = os.path.join(ASSET_DIR, "voice.mp3")
     video_path = os.path.join(OUTPUT_DIR, "auto_video.mp4")
 
-    image_ok = download_image(news["image_url"], raw_image_path)
+    image_ok = download_image(news.get("image_url"), raw_image_path)
 
     if not image_ok:
-        print("No real image found. Using fallback background.")
         create_fallback_news_image(raw_image_path)
 
     script = make_script(news)
 
     if not has_sinhala(script):
-        print("Sinhala script check failed. Skipping video.")
+        print("Sinhala script failed.")
         return
 
-    print("Creating Sinhala voice...")
     create_voice(script, voice_path)
-
-    print("Creating Sinhala video...")
     create_video(news, raw_image_path, voice_path, video_path)
 
-    print("Video created:", video_path)
-    print("Posting disabled: Facebook and Telegram upload code was removed.")
+    caption = f"📰 {news['title_si']}\n\n🌍 {PAGE_NAME}"
+    upload_to_telegram(video_path, caption)
+
+    print("Done.")
 
 
 if __name__ == "__main__":

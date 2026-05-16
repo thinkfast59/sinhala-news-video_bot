@@ -14,18 +14,15 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from gtts import gTTS
 from deep_translator import GoogleTranslator
 
-from moviepy import (
-    VideoClip,
-    AudioFileClip,
-)
+from moviepy import VideoClip, AudioFileClip
 
 
 # =========================
 # SETTINGS
 # =========================
 
-PAGE_NAME = "WORLD NEWS IN SINHALA"
-CHANNEL_NAME_SI = "වර්ල්ඩ් නිව්ස් ඉන් සිංහල"
+PAGE_NAME = "ලෝක පුවත් සිංහලෙන්"
+CHANNEL_NAME_SI = "ලෝක පුවත් සිංහලෙන්"
 
 OUTPUT_DIR = "output"
 ASSET_DIR = "assets"
@@ -35,14 +32,11 @@ VIDEO_WIDTH = 1080
 VIDEO_HEIGHT = 1920
 VIDEO_SIZE = (VIDEO_WIDTH, VIDEO_HEIGHT)
 
-# Sinhala
 VOICE_LANGUAGE = "si"
 TRANSLATE_TO = "si"
 
 MAX_SCRIPT_CHARS = 750
-
 SHOW_SOURCE_TEXT = False
-
 
 FEEDS = [
     "https://www.bbc.com/news/world/rss.xml",
@@ -73,9 +67,6 @@ USER_AGENT = (
     "Chrome/120.0 Safari/537.36"
 )
 
-
-# Words/names that Google Translate can wrongly translate as normal Sinhala words.
-# Keep brand/source names clean in Sinhala text and voice.
 BRAND_TEXT_FIXES = {
     "නාලිකා නිව්ස්ඒෂියා": "Channel NewsAsia",
     "චැනල් නිව්ස්ඒෂියා": "Channel NewsAsia",
@@ -95,17 +86,6 @@ BRAND_TEXT_FIXES = {
 }
 
 
-def fix_brand_translation(text):
-    """Fix common machine-translation mistakes in source/channel names."""
-    text = clean_text(text)
-
-    for wrong, correct in BRAND_TEXT_FIXES.items():
-        text = text.replace(wrong, correct)
-
-    # Clean weird repeated spaces after replacements.
-    return re.sub(r"\s+", " ", text).strip()
-
-
 # =========================
 # TEXT CLEANING
 # =========================
@@ -118,10 +98,8 @@ def clean_text(text):
 
 def shorten(text, max_chars):
     text = clean_text(text)
-
     if len(text) <= max_chars:
         return text
-
     cut = text[:max_chars].rsplit(" ", 1)[0]
     return cut + "..."
 
@@ -130,13 +108,19 @@ def has_sinhala(text):
     return bool(re.search(r"[\u0D80-\u0DFF]", text or ""))
 
 
+def fix_brand_translation(text):
+    text = clean_text(text)
+    for wrong, correct in BRAND_TEXT_FIXES.items():
+        text = text.replace(wrong, correct)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 # =========================
 # TRANSLATION
 # =========================
 
 def translate_to_sinhala(text, max_chars=1200):
     text = shorten(text, max_chars)
-
     if not text:
         return ""
 
@@ -144,7 +128,6 @@ def translate_to_sinhala(text, max_chars=1200):
         translated = GoogleTranslator(source="auto", target=TRANSLATE_TO).translate(text)
         translated = fix_brand_translation(translated)
 
-        # If translation did not return Sinhala, reject it.
         if not has_sinhala(translated):
             print("Translation rejected: no Sinhala characters found.")
             return ""
@@ -186,13 +169,12 @@ def load_used():
                 return json.load(f)
         except Exception:
             return []
-
     return []
 
 
 def save_used(used):
     with open(USED_FILE, "w", encoding="utf-8") as f:
-        json.dump(used[-1000:], f, indent=2)
+        json.dump(used[-1000:], f, indent=2, ensure_ascii=False)
 
 
 # =========================
@@ -204,21 +186,29 @@ def get_font(size, bold=False):
         font_paths = [
             "/usr/share/fonts/truetype/noto/NotoSansSinhala-Bold.ttf",
             "/usr/share/fonts/truetype/noto/NotoSerifSinhala-Bold.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSansSinhala-Bold.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSerifSinhala-Bold.ttf",
+            "assets/NotoSansSinhala-Bold.ttf",
+            "assets/NotoSerifSinhala-Bold.ttf",
         ]
     else:
         font_paths = [
             "/usr/share/fonts/truetype/noto/NotoSansSinhala-Regular.ttf",
             "/usr/share/fonts/truetype/noto/NotoSerifSinhala-Regular.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSansSinhala-Regular.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSerifSinhala-Regular.ttf",
+            "assets/NotoSansSinhala-Regular.ttf",
+            "assets/NotoSerifSinhala-Regular.ttf",
         ]
 
     for path in font_paths:
-        try:
-            return ImageFont.truetype(path, size)
-        except Exception:
-            pass
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                pass
 
+    print("WARNING: Sinhala font not found. Text may show square boxes.")
     return ImageFont.load_default()
 
 
@@ -269,7 +259,6 @@ def draw_multiline(draw, lines, x, y, font, line_height, fill):
     for line in lines:
         draw.text((x, y), line, font=font, fill=fill)
         y += line_height
-
     return y
 
 
@@ -305,7 +294,6 @@ def upgrade_image_url(url):
 
 def get_image_from_feed_entry(entry):
     media_content = entry.get("media_content", [])
-
     if media_content:
         for media in media_content:
             url = media.get("url")
@@ -313,7 +301,6 @@ def get_image_from_feed_entry(entry):
                 return upgrade_image_url(url)
 
     media_thumbnail = entry.get("media_thumbnail", [])
-
     if media_thumbnail:
         for media in media_thumbnail:
             url = media.get("url")
@@ -321,11 +308,9 @@ def get_image_from_feed_entry(entry):
                 return upgrade_image_url(url)
 
     links = entry.get("links", [])
-
     for link in links:
         href = link.get("href", "")
         media_type = link.get("type", "")
-
         if href and "image" in media_type:
             return upgrade_image_url(href)
 
@@ -353,7 +338,6 @@ def get_image_from_article_page(article_url):
 
         for tag_name, attrs in meta_tags:
             tag = soup.find(tag_name, attrs=attrs)
-
             if tag and tag.get("content"):
                 return upgrade_image_url(tag.get("content"))
 
@@ -368,7 +352,6 @@ def download_image(url, output_path):
         return False
 
     urls_to_try = []
-
     upgraded_url = upgrade_image_url(url)
 
     if upgraded_url:
@@ -413,7 +396,6 @@ def cover_resize(img, size):
     img_w, img_h = img.size
 
     scale = max(target_w / img_w, target_h / img_h)
-
     new_w = int(img_w * scale)
     new_h = int(img_h * scale)
 
@@ -500,10 +482,7 @@ def get_news():
     with_image = [item for item in news_items if item.get("image_url")]
     without_image = [item for item in news_items if not item.get("image_url")]
 
-    if with_image:
-        news = random.choice(with_image)
-    else:
-        news = random.choice(without_image)
+    news = random.choice(with_image) if with_image else random.choice(without_image)
 
     article_image = get_image_from_article_page(news["link"])
 
@@ -533,8 +512,12 @@ def make_script(news):
     title = shorten(news["title_si"], 220)
     summary = shorten(news["summary_si"], MAX_SCRIPT_CHARS)
 
-    # Keep the channel name out of Google Translate. This avoids broken channel-name audio.
-    script = f"{title}. {summary}. තවත් ලෝක පුවත් සඳහා {CHANNEL_NAME_SI} සමඟ රැඳී සිටින්න."
+    script = (
+        f"{title}. "
+        f"{summary}. "
+        f"තවත් ලෝක පුවත් සඳහා {CHANNEL_NAME_SI} සමඟ රැඳී සිටින්න."
+    )
+
     return fix_brand_translation(script)
 
 
@@ -583,7 +566,6 @@ def create_news_frame(news, image_path, progress=0.0):
     original = Image.open(image_path).convert("RGB")
 
     zoom = 1.0 + progress * 0.035
-
     crop_w = int(original.width / zoom)
     crop_h = int(original.height / zoom)
 

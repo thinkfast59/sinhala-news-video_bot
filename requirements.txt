@@ -6,3 +6,5 @@ gTTS
 deep-translator
 moviepy
 numpy
+imageio
+imageio-ffmpeg

@@ -31,8 +31,8 @@ VOICE_LANGUAGE = "si"
 TRANSLATE_TO = "si"
 MAX_SCRIPT_CHARS = 750
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_BOT_TOKEN = os.getenv("8467040279:AAHK4WfTDbOfjCCoCg58kZle6CKoW22mwF4")
+TELEGRAM_CHAT_ID = os.getenv("8376417027")
 
 FEEDS = [
     "https://www.bbc.com/news/world/rss.xml",

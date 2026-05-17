@@ -3,7 +3,6 @@ name: Sinhala Telegram News Video Bot
 on:
   schedule:
     - cron: "0 * * * *"
-
   workflow_dispatch:
 
 permissions:
@@ -26,11 +25,7 @@ jobs:
       - name: Install FFmpeg and Sinhala Fonts
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            ffmpeg \
-            fonts-noto-core \
-            fonts-noto-extra \
-            fonts-noto-ui-core
+          sudo apt-get install -y ffmpeg fonts-noto-core fonts-noto-extra fonts-noto-ui-core
           fc-cache -fv
 
       - name: Check Sinhala Fonts
@@ -39,8 +34,7 @@ jobs:
 
       - name: Create Folders
         run: |
-          mkdir -p assets
-          mkdir -p output
+          mkdir -p assets output
 
       - name: Install Python Packages
         run: |
@@ -55,16 +49,18 @@ jobs:
           python bot.py
 
       - name: Upload Video Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: sinhala-news-video
           path: output/auto_video.mp4
+          if-no-files-found: ignore
 
       - name: Commit Used News Memory
+        if: always()
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-
           git add used.json || true
           git diff --cached --quiet || git commit -m "Update used news"
           git push || true

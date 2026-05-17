@@ -1,10 +1,8 @@
 requests
 feedparser
 beautifulsoup4
-pillow
+Pillow
 gTTS
 deep-translator
 moviepy
 numpy
-imageio
-imageio-ffmpeg

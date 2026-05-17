@@ -17,7 +17,7 @@ from deep_translator import GoogleTranslator
 from moviepy import VideoClip, AudioFileClip
 
 PAGE_NAME = "world news"
-CHANNEL_NAME_En = "world news"
+CHANNEL_NAME_si = "world news"
 
 OUTPUT_DIR = "output"
 ASSET_DIR = "assets"

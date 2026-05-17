@@ -16,8 +16,8 @@ from gtts import gTTS
 from deep_translator import GoogleTranslator
 from moviepy import VideoClip, AudioFileClip
 
-PAGE_NAME = "world news"
-CHANNEL_NAME_si = "world news"
+PAGE_NAME = "ලෝක පුවත් සිංහලෙන්"
+CHANNEL_NAME_SI = "ලෝක පුවත් සිංහලෙන්"
 
 OUTPUT_DIR = "output"
 ASSET_DIR = "assets"
@@ -37,7 +37,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
 FEEDS = [
-    
+    "https://www.bbc.com/news/world/rss.xml",
     "https://feeds.skynews.com/feeds/rss/world.xml",
     "https://www.aljazeera.com/xml/rss/all.xml",
     "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
@@ -50,7 +50,6 @@ FEEDS = [
     "https://www.hindustantimes.com/feeds/rss/world-news/rssfeed.xml",
     "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml",
     "https://www.middleeasteye.net/rss",
-    "https://www.bbc.com/news/world/rss.xml",
     "https://feeds.bbci.co.uk/news/business/rss.xml",
     "https://feeds.bbci.co.uk/news/technology/rss.xml",
 ]
@@ -83,6 +82,7 @@ def remove_bad_translation_words(text: str) -> str:
     replacements = {
         "නවතම ලෙස": "නවතම",
         "සජීවී": "LIVE",
+        "ලයිව්": "LIVE",
         "යාවත්කාලීන කිරීම": "යාවත්කාලීන",
     }
     for a, b in replacements.items():
@@ -248,9 +248,9 @@ def create_fallback_news_image(path):
     for y in range(VIDEO_HEIGHT):
         ratio = y / VIDEO_HEIGHT
         draw.line([(0, y), (VIDEO_WIDTH, y)], fill=(int(8 + 10 * ratio), int(16 + 40 * ratio), int(35 + 70 * ratio)))
-    draw.text((80, 760), "WORLD", font=get_font(96, True), fill="white")
-    draw.text((80, 890), "NEWS", font=get_font(96, True), fill=(255, 70, 70))
-    draw.text((80, 1030), "IN SINHALA", font=get_font(58, False), fill="white")
+    draw.text((80, 760), "ලෝක", font=get_font(96, True), fill="white")
+    draw.text((80, 890), "පුවත්", font=get_font(96, True), fill=(255, 70, 70))
+    draw.text((80, 1030), "සිංහලෙන්", font=get_font(58, False), fill="white")
     img.save(path, quality=95)
 
 
@@ -306,7 +306,7 @@ def make_script(news):
 
 
 def create_voice(script, path):
-    gTTS(text=script, lang=VOICE_LANGUAGE, fast=False).save(path)
+    gTTS(text=script, lang=VOICE_LANGUAGE, slow=False).save(path)
 
 
 def add_dark_gradient(img):
